@@ -1,6 +1,10 @@
 ///////////////////////////////////////////////////////////
 // Get the days forecast (usually a pollen forecast)
-// 
+// and display it on the 3D printed ball using LED's
+//
+// Josh Trotter-Wanner - Oct. 2012
+//
+//
 //
 //////////////////////////
 // Using XML parsing code from http://forums.adafruit.com/viewtopic.php?f=25&t=30824
@@ -11,7 +15,7 @@
 //    <tag>data</tag> or <tag>data
 //
 ///////////////////////////////////////////////////////////
-boolean debug = false;
+boolean debug = true;
 
 #include <Ethernet.h>
 #include <SPI.h>
@@ -39,7 +43,7 @@ const int blinkTiming = 1500; // blink cycle time in milliseconds
 
 boolean error = false;
 boolean startTest = true;
-boolean toggle = 0;
+boolean toggle = true;
 
 // Light being tested
 int pX = 0;
@@ -53,20 +57,20 @@ const byte Pins[3][3] = { //[Display], [Color]
 
 // "Low", "Medium", "High", and "Very High"
 // 0=No Forecast/Off, 1=Low/Green, 2=Medium/Yellow, 3=High/Red, 4=Very High/Flashing Red
-byte currentForecast[3] = { 0,0,0 };
+byte currentForecast[3] = { 0,0,0 };    // { First, Second, Third }
 
 // Enter a MAC address for your controller below.
 // Newer Ethernet shields have a MAC address printed on a sticker on the shield
 //90-A2-DA-00-14-4A
 byte mac[] = {  0x90, 0xA2, 0xDA, 0x00, 0x14, 0x4A };
-//char serverName[] = "www.google.com";
+//char serverName[] = "welovedata.org";  //switch to this when live
 char serverName[] = "192.168.123.103";
 
 ///Serial Number storage location
 int SN_Start=16;  //Choose location from 0 to 511 - SN_Len
 int SN_Len=4;
 
-///Web response parse variables
+///Web response parse variables for XML parsing code
 // Max string length may have to be adjusted depending on data to be extracted
 #define MAX_STRING_LEN  20
 
@@ -89,7 +93,9 @@ EthernetClient client;
 
 void waitAwhile() {
   //need to include overflow handling?
-  delay(3600000); //an hour
+//  delay(3600000); //an hour
+//  delay(60000); //a minute
+  delay(20000); //20secs
 }
 
 void setup() {
@@ -103,29 +109,6 @@ void setup() {
       digitalWrite (Pins[x][y], off);
     }
   }
-      
-/*
-  pinMode (One_Green, OUTPUT);
-  digitalWrite (One_Green, off);
-  pinMode (One_Yellow, OUTPUT);
-  digitalWrite (One_Yellow, off);
-  pinMode (One_Red, OUTPUT);
-  digitalWrite (One_Red, off);
-  
-  pinMode (Two_Green, OUTPUT);
-  digitalWrite (Two_Green, off);
-  pinMode (Two_Yellow, OUTPUT);
-  digitalWrite (Two_Yellow, off);
-  pinMode (Two_Red, OUTPUT);
-  digitalWrite (Two_Red, off);
-
-  pinMode (Three_Green, OUTPUT);
-  digitalWrite (Three_Green, off);
-  pinMode (Three_Yellow, OUTPUT);
-  digitalWrite (Three_Yellow, off);
-  pinMode (Three_Red, OUTPUT);
-  digitalWrite (Three_Red, off);
-*/  
   
   cli();  //stop interupts
 
@@ -135,7 +118,6 @@ void setup() {
   TCNT1  = 0;//initialize counter value to 0
   // set compare match register for 1hz increments
 //  OCR1A = 15624;// = (16*10^6) / (1*1024) - 1 (must be <65536) = 1Hz
-//  OCR1A = 7812;// = (16*10^6) / (2*1024) - 1 (must be <65536) = 2Hz
   if (debug) {
     Serial.print("Timing target=");
     Serial.println( word( (16000000) / ((2000/blinkTiming)*1024) ) - 1 );
@@ -161,18 +143,6 @@ void setup() {
 
   // give the Ethernet shield a second to initialize:
   delay(1000);
-
-  //grab EEPROM data
-/*
-  if (debug) {
-    for (int x = 0; x < 1024; x++) {
-      Serial.print(x);
-      Serial.print("=");
-      Serial.print(EEPROM.read(x));
-      Serial.print(", ");
-    }
-  }
-*/
 }
 
 void loop() {
@@ -192,15 +162,16 @@ void loop() {
     client.println(" HTTP/1.0");
     client.println();
     error=false;
-  } 
-  else {
-    // kf you didn't get a connection to the server:
+  } else {
+    // if you didn't get a connection to the server:
     if (debug) {Serial.println("connection failed");}
     error=true;
   }
   
-  delay(1000);
-
+  if (debug) {Serial.println("Requested page");}
+  
+  while (!client.available()); //wait for a response
+    
   // Read serial data in from web:
   while (client.available()) {
     serialEvent();
@@ -212,16 +183,35 @@ void loop() {
       Serial.println("disconnecting.");
     }
     client.stop();
+    if (debug) {Serial.println("waiting");}
     waitAwhile();
   }
   
+  if (debug) {Serial.println("looping");}
+  
 }
 
-//setSN(dataStr);
-//setLights(1,dataStr);
 void setSN(char *SNdata) {
+//  char currentSNbyte[3];
   // check SN from web against the current serial number
   // if different then update serial number (100,000 max updates)
+  if (debug) {
+    Serial.println(SNdata);
+    Serial.print("New SN=");
+    Serial.println(SNdata);
+  }
+
+//  currentSNbyte = SNdata;
+  if (debug) {Serial.print("Current SN=");}
+  for(int x = SN_Start; x < ( SN_Start + SN_Len ); x++) {
+    if (debug) {Serial.print(EEPROM.read(x));}
+//    client.print(EEPROM.read(x));
+    if (x < ( SN_Start + SN_Len -1 ))
+//      client.print(".");
+      if (debug) {Serial.print(".");}
+  }
+  if (debug) {Serial.println();}
+  
 }
 
 void setLights(byte numb, char *fc) {
@@ -238,20 +228,6 @@ void setLights(byte numb, char *fc) {
     currentForecast[numb - 1] = 0;
   }
 }
-
-/*
-const int One_Green = 7;
-const int One_Yellow = 8;
-const int One_Red = 9;
-
-const int Two_Green = 4;
-const int Two_Yellow = 5;
-const int Two_Red = 6;
-
-const int Three_Green = 1;
-const int Three_Yellow = 2;
-const int Three_Red = 3;
-*/
 
 // Process each char from web
 void serialEvent() {
@@ -350,10 +326,9 @@ void serialEvent() {
 }
 
 
-//timer1 interrupt 1Hz to test light
+//timer1 interrupt to blink/set lights
 ISR(TIMER1_COMPA_vect){
-//generates pulse wave of frequency 1Hz/2 = 0.5kHz (takes two cycles for full wave- toggle high then toggle low)
- if (error) {
+ if (error) {  // display a network error
   if (toggle){
     digitalWrite(One_Yellow,on);
     toggle = false;
@@ -361,7 +336,7 @@ ISR(TIMER1_COMPA_vect){
     digitalWrite(One_Yellow,off);
     toggle = true;
   }
- } else if (startTest) {
+ } else if (startTest) {  // test the LED's
   if (toggle){
     digitalWrite(Pins[pX][pY],on);
     toggle = false;
@@ -377,7 +352,7 @@ ISR(TIMER1_COMPA_vect){
       startTest = false;
     }
   }
- } else {
+ } else {  // set the LED's based on the forecast
   // 
   //[Display], [Color]
   for (byte x=0;x<3;x++) {
@@ -401,88 +376,7 @@ ISR(TIMER1_COMPA_vect){
     }
   }
  }
-
-/*  switch (pin) {
-    case 1:
-      digitalWrite(One_Green,on);
-      pin++;
-      break;
-    case 2:
-      digitalWrite(One_Green,off);
-      pin++;
-      break;
-    case 3:
-      digitalWrite(One_Yellow,on);
-      pin++;
-      break;
-    case 4:
-      digitalWrite(One_Yellow,off);
-      pin++;
-      break;
-    case 5:
-      digitalWrite(One_Red,on);
-      pin++;
-      break;
-    case 6:
-      digitalWrite(One_Red,off);
-      pin++;
-      break;
-
-    case 7:
-      digitalWrite(Two_Green,on);
-      pin++;
-      break;
-    case 8:
-      digitalWrite(Two_Green,off);
-      pin++;
-      break;
-    case 9:
-      digitalWrite(Two_Yellow,on);
-      pin++;
-      break;
-    case 10:
-      digitalWrite(Two_Yellow,off);
-      pin++;
-      break;
-    case 11:
-      digitalWrite(Two_Red,on);
-      pin++;
-      break;
-    case 12:
-      digitalWrite(Two_Red,off);
-      pin++;
-      break;
-
-    case 13:
-      digitalWrite(Three_Green,on);
-      pin++;
-      break;
-    case 14:
-      digitalWrite(Three_Green,off);
-      pin++;
-      break;
-    case 15:
-      digitalWrite(Three_Yellow,on);
-      pin++;
-      break;
-    case 16:
-      digitalWrite(Three_Yellow,off);
-      pin++;
-      break;
-    case 17:
-      digitalWrite(Three_Red,on);
-      pin++;
-      break;
-    case 18:
-      digitalWrite(Three_Red,off);
-      pin++;
-      break;
-    default:
-      //cli();//didn't stop interrupts
-      ;
-  }
-*/
-}
+} //end of ISR
 
 // Function to clear a string
 void clearStr (char* str) {
