@@ -15,7 +15,7 @@
 //    <tag>data</tag> or <tag>data
 //
 ///////////////////////////////////////////////////////////
-boolean debug = true;
+boolean debug = false;
 
 #include <Ethernet.h>
 #include <SPI.h>
@@ -65,6 +65,7 @@ byte currentForecast[3] = { 0,0,0 };    // { First, Second, Third }
 byte mac[] = {  0x90, 0xA2, 0xDA, 0x00, 0x14, 0x4A };
 //char serverName[] = "welovedata.org";  //switch to this when live
 char serverName[] = "192.168.123.103";
+char targetFile[] = "/forecast/forecast.php";
 
 ///Serial Number storage location
 int SN_Start=16;  //Choose location from 0 to 511 - SN_Len
@@ -92,10 +93,10 @@ boolean dataFlag = false;
 EthernetClient client;
 
 void waitAwhile() {
-  //need to include overflow handling?
-//  delay(3600000); //an hour
+  //need to include overflow handling? ??????
+  delay(3600000); //an hour
 //  delay(60000); //a minute
-  delay(20000); //20secs
+//  delay(20000); //20secs
 }
 
 void setup() {
@@ -153,7 +154,9 @@ void loop() {
     // this code needs to be modified to work with a virtual host setup
     // The HOST value needs to be sent
     // ********** 
-    client.print("GET /forecast/forecast.php?sn=");
+    client.print("GET ");
+    client.print(targetFile);
+    client.print("?sn=");
     for(int x = SN_Start; x < ( SN_Start + SN_Len ); x++) {
       client.print(EEPROM.read(x));
       if (x < ( SN_Start + SN_Len -1 ))
@@ -192,23 +195,70 @@ void loop() {
 }
 
 void setSN(char *SNdata) {
-//  char currentSNbyte[3];
+  char aNewSNbyte[4];
+  byte NewSN[4];
+  int j=0;
   // check SN from web against the current serial number
   // if different then update serial number (100,000 max updates)
   if (debug) {
-    Serial.println(SNdata);
+    Serial.println();
     Serial.print("New SN=");
     Serial.println(SNdata);
   }
+  for (int x=0;x<4;x++) {
+    aNewSNbyte[x] = '\0';
+  }
+  for (int i=0;i<strlen(SNdata);i++) {
+    // Parse the returned serial number
+    if (SNdata[i] == '.') {
+      NewSN[j] = atoi(aNewSNbyte);
+      if (debug) {
+        Serial.print(strlen(aNewSNbyte));
+        Serial.print("=");
+        Serial.print(aNewSNbyte);
+        Serial.print("=");
+        Serial.print(atoi(aNewSNbyte));
+      }
+      for (int x=0;x<4;x++) {
+        aNewSNbyte[x] = '\0';
+      }
+      j++;
+    } else {
+      aNewSNbyte[strlen(aNewSNbyte)] = SNdata[i];
+    }
+  }
+  NewSN[j] = atoi(aNewSNbyte);  //assign the last byte because the SN doesn't end in a period
+  if (debug) {Serial.println(aNewSNbyte);}
+  j++;
 
+  if (debug) {
+    Serial.print("New SN Parsed=");
+    for (int x=0;x<j;x++) {
+      Serial.print(NewSN[x]);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+  
 //  currentSNbyte = SNdata;
-  if (debug) {Serial.print("Current SN=");}
+  if (debug) {
+    Serial.print("NewSN bytes=");
+    Serial.println(j);
+    Serial.print("Current SN=");
+  }
   for(int x = SN_Start; x < ( SN_Start + SN_Len ); x++) {
     if (debug) {Serial.print(EEPROM.read(x));}
-//    client.print(EEPROM.read(x));
-    if (x < ( SN_Start + SN_Len -1 ))
-//      client.print(".");
-      if (debug) {Serial.print(".");}
+      if (EEPROM.read(x) != NewSN[x-SN_Start]){
+        if (debug) {Serial.print("->"); Serial.print(NewSN[x-SN_Start]); Serial.print(" ");}
+        ////////////////////////////////////////////////////////////
+        // This writes the new serial number to the Pollen predictor
+        // only 100,000 writes are permitted thru the life of the device
+//        EEPROM.write(x,NewSN[x-SN_Start]);
+      }
+    if (debug) {
+      if (x < ( SN_Start + SN_Len -1 ))
+        Serial.print(".");
+    }
   }
   if (debug) {Serial.println();}
   
@@ -234,7 +284,6 @@ void serialEvent() {
 
    // Read a char
 	char inChar = client.read();
-   //Serial.print(".");
   
    if (inChar == '<') {
       addChar(inChar, tmpStr);
