@@ -64,8 +64,8 @@ byte currentForecast[3] = { 0,0,0 };    // { First, Second, Third }
 //90-A2-DA-00-14-4A
 byte mac[] = {  0x90, 0xA2, 0xDA, 0x00, 0x14, 0x4A };
 //char serverName[] = "welovedata.org";  //switch to this when live
-char serverName[] = "192.168.123.103";
-char targetFile[] = "/forecast/forecast.php";
+char serverName[] = "joshtw.com"; // "192.168.123.103";
+char targetFile[] = "/welovedata/forecast.php";
 
 ///Serial Number storage location
 int SN_Start=16;  //Choose location from 0 to 511 - SN_Len
